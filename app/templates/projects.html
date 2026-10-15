@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Projects | Engineering Drawing Intelligence{% endblock %}
+{% block page_title %}Engineering Projects{% endblock %}
+
+{% block topbar_actions %}
+  <button id="openNewProjectBtn" class="btn btn-primary btn-sm">
+    <i data-lucide="folder-plus"></i>
+    <span>Create project</span>
+  </button>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <div>
+    <h2 class="section-title">Engineering projects</h2>
+    <p class="section-subtitle">Manage drawing assemblies, revision packages, and compliance records.</p>
+  </div>
+</div>
+
+{% if projects %}
+  <div class="table-container">
+    <table class="eng-table">
+      <thead>
+        <tr>
+          <th>Project name</th>
+          <th>Part number</th>
+          <th>Revision</th>
+          <th>Description</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr>
+          <td>
+            <a href="/projects/{{ p.id }}" style="color: var(--accent-blue); font-weight: 600; text-decoration: none;">
+              {{ p.name }}
+            </a>
+          </td>
+          <td class="text-mono" style="font-weight: 500;">{{ p.part_number or '—' }}</td>
+          <td><span class="badge badge-neutral">{{ p.revision or 'Rev A' }}</span></td>
+          <td style="color: var(--text-secondary); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            {{ p.description or 'No description provided.' }}
+          </td>
+          <td>
+            <span class="badge {% if p.status == 'active' %}badge-pass{% else %}badge-review{% endif %}">
+              {{ p.status }}
+            </span>
+          </td>
+          <td class="text-mono" style="font-size: 0.8rem; color: var(--text-muted);">
+            {{ p.created_at.strftime('%Y-%m-%d') }}
+          </td>
+          <td style="text-align: right;">
+            <div style="display: inline-flex; gap: 0.4rem;">
+              <a href="/projects/{{ p.id }}" class="btn btn-secondary btn-sm">
+                <span>Open</span>
+                <i data-lucide="chevron-right"></i>
+              </a>
+              <button class="btn btn-ghost btn-sm" onclick="archiveProject({{ p.id }})" title="Archive project">
+                <i data-lucide="archive"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="card" style="text-align: center; padding: 4rem 1.5rem;">
+    <i data-lucide="folder" style="width: 36px; height: 36px; color: var(--text-muted); margin: 0 auto 1rem;"></i>
+    <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem;">No engineering projects found</h3>
+    <p style="color: var(--text-secondary); font-size: 0.88rem; max-width: 420px; margin: 0 auto 1.5rem;">
+      Create a project to start uploading drawings, extracting geometric features, and validating specifications.
+    </p>
+    <button id="openNewProjectBtnEmpty" class="btn btn-primary btn-sm">
+      <i data-lucide="folder-plus"></i>
+      <span>Create project</span>
+    </button>
+  </div>
+{% endif %}
+
+<!-- Create Project Modal Dialog -->
+<div id="createProjectModal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Create engineering project</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeModal('createProjectModal')">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+    <form id="createProjectForm">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="projName">Project name *</label>
+          <input type="text" id="projName" class="form-control" required placeholder="e.g. Turbine Rotor Hub Assembly">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label class="form-label" for="projPartNo">Part number</label>
+            <input type="text" id="projPartNo" class="form-control" placeholder="e.g. TR-9940-A">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="projRevision">Revision</label>
+            <input type="text" id="projRevision" class="form-control" value="Rev A">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="projDesc">Description & scope</label>
+          <textarea id="projDesc" class="form-control" rows="3" placeholder="Enter mechanical engineering specifications or assembly requirements..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('createProjectModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create project</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/projects.js"></script>
+{% endblock %}

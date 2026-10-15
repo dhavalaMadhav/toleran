@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block title %}Drawing Analysis #{{ analysis.id }} | {{ project.name }}{% endblock %}
+{% block page_title %}Drawing Intelligence & Compliance Workspace{% endblock %}
+
+{% block topbar_breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="/projects">Projects</a>
+    <span class="breadcrumbs-separator">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.part_number or project.name }}</a>
+    <span class="breadcrumbs-separator">/</span>
+    <span>Analysis #{{ analysis.id }}</span>
+  </div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/viewer.css">
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/projects/{{ project.id }}/review" class="btn btn-secondary btn-sm">
+    <i data-lucide="eye"></i>
+    <span>Review queue</span>
+  </a>
+  <a href="/projects/{{ project.id }}/reports" class="btn btn-secondary btn-sm">
+    <i data-lucide="download"></i>
+    <span>Export report</span>
+  </a>
+  <a href="/projects/{{ project.id }}/copilot" class="btn btn-primary btn-sm">
+    <i data-lucide="message-circle"></i>
+    <span>Ask copilot</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="viewer-workspace">
+  <!-- Left Column: Interactive Engineering Drawing Canvas -->
+  <div class="viewer-canvas-panel">
+    <!-- Viewport Controls Toolbar -->
+    <div class="viewer-toolbar">
+      <div class="toolbar-group">
+        <label for="pageSelect" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 500;">PAGE</label>
+        <select id="pageSelect" class="form-control" style="padding: 0.2rem 0.5rem; font-size: 0.8rem; width: auto; height: 30px;">
+          {% for p in pages %}
+            <option value="{{ p.page_number }}" data-img="/static/{{ p.render_image_path.replace('\\', '/') }}" data-w="{{ p.render_width_px }}" data-h="{{ p.render_height_px }}">
+              Page {{ p.page_number }} ({{ p.render_width_px }}×{{ p.render_height_px }} px)
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Zoom & Fit Controls -->
+      <div class="toolbar-group">
+        <button id="zoomOutBtn" class="tool-btn" title="Zoom Out (Scroll Down)">
+          <i data-lucide="minus"></i>
+        </button>
+        <span id="zoomLevelText" class="zoom-indicator">100%</span>
+        <button id="zoomInBtn" class="tool-btn" title="Zoom In (Scroll Up)">
+          <i data-lucide="plus"></i>
+        </button>
+        <button id="resetZoomBtn" class="tool-btn" title="Fit to Screen">
+          <i data-lucide="maximize-2"></i>
+          <span>Fit</span>
+        </button>
+      </div>
+
+      <!-- Overlays & Flag Navigation -->
+      <div class="toolbar-group">
+        <button id="toggleOverlaysBtn" class="tool-btn active" title="Toggle Bounding Box Overlays">
+          <i data-lucide="layers"></i>
+          <span>Overlays</span>
+        </button>
+        <div style="width: 1px; height: 20px; background-color: var(--border-subtle); margin: 0 0.2rem;"></div>
+        <button id="prevFlagBtn" class="tool-btn" title="Previous Flagged Characteristic">
+          <i data-lucide="chevron-left"></i>
+        </button>
+        <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 500;">FLAGS</span>
+        <button id="nextFlagBtn" class="tool-btn" title="Next Flagged Characteristic">
+          <i data-lucide="chevron-right"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Drawing Viewport Canvas Area -->
+    <div id="viewport" class="canvas-viewport">
+      <div id="stage" class="canvas-stage">
+        {% if pages %}
+          <img id="drawingImage" class="drawing-image" src="/static/{{ pages[0].render_image_path.replace('\\', '/') }}" alt="Mechanical Drawing Render">
+          <svg id="annotationSvg" class="annotation-svg-overlay"></svg>
+        {% else %}
+          <div style="color: var(--text-muted); padding: 4rem; text-align: center;">No page renders available for this drawing.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Characteristics & Verification Inspector -->
+  <div class="viewer-details-panel">
+    <!-- Tabs Header -->
+    <div class="details-tab-bar">
+      <button class="tab-btn active" onclick="switchTab('annotationsTab')">
+        Characteristics ({{ annotations|length }})
+      </button>
+      <button class="tab-btn" onclick="switchTab('findingsTab')">
+        Compliance ({{ findings|length }})
+      </button>
+      <button class="tab-btn" onclick="switchTab('editorTab')">
+        Inspector
+      </button>
+    </div>
+
+    <div class="details-content">
+      <!-- Tab 1: Characteristics List & Filters -->
+      <div id="annotationsTab" class="tab-pane">
+        <!-- Filter Controls -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.85rem;">
+          <select id="typeFilter" class="form-control" style="font-size: 0.78rem; padding: 0.35rem 0.5rem; flex: 1;">
+            <option value="all">All Dimension Types</option>
+            <option value="diameter">Diameter (⌀)</option>
+            <option value="linear">Linear</option>
+            <option value="radius">Radius (R)</option>
+            <option value="thread">Thread (M)</option>
+            <option value="angular">Angular</option>
+          </select>
+          <select id="statusFilter" class="form-control" style="font-size: 0.78rem; padding: 0.35rem 0.5rem; flex: 1;">
+            <option value="all">All Statuses</option>
+            <option value="auto_accepted">Auto accepted</option>
+            <option value="pending_review">Needs review</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+
+        <!-- Characteristics Table -->
+        <div class="table-container" style="max-height: calc(100vh - 280px); overflow-y: auto;">
+          <table class="eng-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Callout</th>
+                <th>Nominal</th>
+                <th>Interval</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="annotationsTableBody">
+              {% for a in annotations %}
+              <tr class="ann-row" data-id="{{ a.id }}" data-page="{{ a.page_number }}" data-x0="{{ a.bbox_x0 }}" data-y0="{{ a.bbox_y0 }}" data-x1="{{ a.bbox_x1 }}" data-y1="{{ a.bbox_y1 }}" data-type="{{ a.dimension_type }}" data-status="{{ a.verification_status }}" style="cursor: pointer;">
+                <td class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">#{{ a.id }}</td>
+                <td>
+                  <strong style="color: var(--text-primary); font-family: var(--font-mono); font-size: 0.85rem;">{{ a.original_text }}</strong>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">{{ a.dimension_type }}</div>
+                </td>
+                <td class="text-mono" style="font-size: 0.82rem;">
+                  {{ a.nominal_value if a.nominal_value is not none else '—' }} {{ a.unit }}
+                </td>
+                <td class="text-mono" style="font-size: 0.78rem;">
+                  {% if a.min_val is not none %}
+                    [{{ a.min_val }}, {{ a.max_val }}]
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>
+                  {% if a.verification_status == 'auto_accepted' %}
+                    <span class="badge badge-pass">Auto</span>
+                  {% elif a.verification_status == 'pending_review' %}
+                    <span class="badge badge-review">Review</span>
+                  {% elif a.verification_status == 'approved' %}
+                    <span class="badge badge-pass">Approved</span>
+                  {% else %}
+                    <span class="badge badge-fail">{{ a.verification_status }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 2: Compliance Findings -->
+      <div id="findingsTab" class="tab-pane" style="display: none;">
+        {% if findings %}
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            {% for f in findings %}
+            <div class="card" style="padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <span class="text-mono" style="font-weight: 600; font-size: 0.82rem;">Finding #{{ f.id }}</span>
+                {% if f.outcome == 'pass' %}
+                  <span class="badge badge-pass">PASS</span>
+                {% elif f.outcome == 'fail' %}
+                  <span class="badge badge-fail">FAIL</span>
+                {% else %}
+                  <span class="badge badge-review">{{ f.outcome|upper }}</span>
+                {% endif %}
+              </div>
+              <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.25rem;">
+                {{ f.rule_identifier }}
+              </div>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.65rem; line-height: 1.5;">
+                {{ f.explanation }}
+              </p>
+              <div style="font-size: 0.76rem; background: var(--bg-subtle); padding: 0.5rem 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                <div><span class="text-muted">Expected:</span> <span class="text-mono" style="font-weight: 500;">{{ f.expected_value or 'N/A' }}</span></div>
+                <div><span class="text-muted">Observed:</span> <span class="text-mono" style="font-weight: 500;">{{ f.observed_value or 'N/A' }}</span></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="text-align: center; color: var(--text-secondary); padding: 3rem 1rem; font-size: 0.85rem;">
+            No compliance deviations evaluated for this drawing.
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Tab 3: Active Selected Characteristic Inspector & Verification -->
+      <div id="editorTab" class="tab-pane" style="display: none;">
+        <div id="selectedAnnotationContainer">
+          <div style="text-align: center; color: var(--text-muted); padding: 4rem 1rem;">
+            <i data-lucide="crosshair" style="width: 32px; height: 32px; margin: 0 auto 0.75rem; color: var(--text-muted);"></i>
+            <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 0.25rem;">No characteristic selected</p>
+            <p style="font-size: 0.78rem;">Click any highlighted bounding box on the drawing or row in the table to inspect details.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.ANALYSIS_DATA = {
+    analysisId: {{ analysis.id }},
+    pages: [
+      {% for p in pages %}
+      {
+        page_number: {{ p.page_number }},
+        render_image_path: "{{ p.render_image_path.replace('\\', '/') }}",
+        render_width_px: {{ p.render_width_px }},
+        render_height_px: {{ p.render_height_px }}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ],
+    projectId: {{ project.id }},
+    annotations: [
+      {% for a in annotations %}
+      {
+        id: {{ a.id }},
+        page_number: {{ a.page_number }},
+        original_text: "{{ a.original_text }}",
+        dimension_type: "{{ a.dimension_type }}",
+        nominal_value: {{ a.nominal_value if a.nominal_value is not none else 'null' }},
+        unit: "{{ a.unit }}",
+        upper_deviation: {{ a.upper_deviation if a.upper_deviation is not none else 'null' }},
+        lower_deviation: {{ a.lower_deviation if a.lower_deviation is not none else 'null' }},
+        min_val: {{ a.min_val if a.min_val is not none else 'null' }},
+        max_val: {{ a.max_val if a.max_val is not none else 'null' }},
+        tolerance_type: "{{ a.tolerance_type }}",
+        bbox: { x0: {{ a.bbox_x0 }}, y0: {{ a.bbox_y0 }}, x1: {{ a.bbox_x1 }}, y1: {{ a.bbox_y1 }} },
+        confidence: {{ a.confidence }},
+        is_ambiguous: {{ 'true' if a.is_ambiguous else 'false' }},
+        ambiguity_reason: "{{ a.ambiguity_reason or '' }}",
+        verification_status: "{{ a.verification_status }}",
+        crop_image_url: "{{ '/static/' ~ a.crop_image_path.replace('\\', '/') if a.crop_image_path else '' }}"
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+  };
+</script>
+<script src="/static/js/drawing_viewer.js"></script>
+{% endblock %}

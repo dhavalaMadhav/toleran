@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Engineering Drawing Intelligence{% endblock %} | Copilot</title>
+  
+  <!-- Modern Engineering Typography (Swiss Precision) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Outline Icon Family -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="app-container">
+    <!-- Slim White Sidebar Navigation -->
+    <aside class="app-sidebar">
+      <div class="sidebar-header">
+        <div class="brand-icon">Δ</div>
+        <div class="brand-text">
+          <div class="brand-title">CAD Intelligence</div>
+          <div class="brand-subtitle">Compliance Copilot</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Workspace</div>
+        <a href="/dashboard" class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}">
+          <i data-lucide="layout-dashboard" class="nav-icon"></i>
+          <span>Dashboard</span>
+        </a>
+        <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">
+          <i data-lucide="folder" class="nav-icon"></i>
+          <span>Projects</span>
+        </a>
+
+        {% if project %}
+        <div class="nav-section-title">Project &bull; {{ project.part_number or project.name[:14] }}</div>
+        <a href="/projects/{{ project.id }}" class="nav-link {% if request.url.path == '/projects/' ~ project.id %}active{% endif %}">
+          <i data-lucide="file-text" class="nav-icon"></i>
+          <span>Overview</span>
+        </a>
+        <a href="/projects/{{ project.id }}/specifications" class="nav-link {% if '/specifications' in request.url.path %}active{% endif %}">
+          <i data-lucide="clipboard-check" class="nav-icon"></i>
+          <span>Specifications</span>
+        </a>
+        <a href="/projects/{{ project.id }}/review" class="nav-link {% if '/review' in request.url.path %}active{% endif %}">
+          <i data-lucide="eye" class="nav-icon"></i>
+          <span>Review Queue</span>
+        </a>
+        <a href="/projects/{{ project.id }}/copilot" class="nav-link {% if '/copilot' in request.url.path %}active{% endif %}">
+          <i data-lucide="message-circle" class="nav-icon"></i>
+          <span>Copilot Q&A</span>
+        </a>
+        <a href="/projects/{{ project.id }}/reports" class="nav-link {% if '/reports' in request.url.path %}active{% endif %}">
+          <i data-lucide="download" class="nav-icon"></i>
+          <span>Reports & Export</span>
+        </a>
+        {% endif %}
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="sidebar-footer-link">
+          <i data-lucide="settings" style="width: 15px; height: 15px;"></i>
+          <span>ASME Y14.5 / ISO 1101</span>
+        </span>
+        <span style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">v1.2</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Shell -->
+    <main class="app-main">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <h1 class="page-title">{% block page_title %}Engineering Workspace{% endblock %}</h1>
+          {% block topbar_breadcrumbs %}{% endblock %}
+        </div>
+        <div class="topbar-right">
+          {% block topbar_actions %}{% endblock %}
+          <div class="user-indicator">
+            <span class="status-dot"></span>
+            <span>{{ current_user.full_name if current_user else 'Lead Engineer' }}</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="content-wrapper">
+        {% block content %}{% endblock %}
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Alert Notifications Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Global Application Scripts -->
+  <script src="/static/js/main.js"></script>
+  <script>
+    // Initialize Lucide icons on DOM ready
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

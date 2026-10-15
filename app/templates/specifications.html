@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Specifications | {{ project.name }}{% endblock %}
+{% block page_title %}Technical Specifications & Requirements{% endblock %}
+
+{% block topbar_breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="/projects">Projects</a>
+    <span class="breadcrumbs-separator">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.part_number or project.name }}</a>
+    <span class="breadcrumbs-separator">/</span>
+    <span>Specifications</span>
+  </div>
+{% endblock %}
+
+{% block topbar_actions %}
+  <button id="addReqBtn" class="btn btn-primary btn-sm">
+    <i data-lucide="plus"></i>
+    <span>Add requirement</span>
+  </button>
+  <button id="reEvaluateComplianceBtn" class="btn btn-secondary btn-sm" onclick="reEvaluateCompliance()">
+    <i data-lucide="play"></i>
+    <span>Run compliance check</span>
+  </button>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <div>
+    <h2 class="section-title">Technical specifications & requirements</h2>
+    <p class="section-subtitle">Parsed design clauses, geometric constraints, and tolerance envelope definitions.</p>
+  </div>
+</div>
+
+<!-- Specification Documents Index -->
+<div class="section-block">
+  <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+    <h3 class="card-title">Specification documents</h3>
+    <span class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">{{ spec_docs|length }} documents</span>
+  </div>
+
+  {% if spec_docs %}
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      {% for d in spec_docs %}
+      <div class="card" style="padding: 0.85rem 1.15rem; display: flex; align-items: center; gap: 0.85rem; min-width: 260px;">
+        <i data-lucide="file-text" style="width: 20px; height: 20px; color: var(--accent-blue); flex-shrink: 0;"></i>
+        <div>
+          <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary);">{{ d.original_filename }}</div>
+          <div class="text-mono" style="font-size: 0.75rem; color: var(--text-muted);">
+            {{ (d.file_size_bytes / 1024)|round(1) }} KB &bull; Parsed clauses
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card" style="text-align: center; padding: 2rem; color: var(--text-secondary); font-size: 0.85rem;">
+      No technical specification documents uploaded yet. You can upload specifications from the project overview or add manual requirements below.
+    </div>
+  {% endif %}
+</div>
+
+<!-- Extracted Engineering Requirements Table -->
+<div class="section-block">
+  <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+    <h3 class="card-title">Engineering requirements & tolerance rules</h3>
+    <span class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">{{ requirements|length }} active rules</span>
+  </div>
+
+  {% if requirements %}
+    <div class="table-container">
+      <table class="eng-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Title & constraint</th>
+            <th>Type</th>
+            <th>Nominal</th>
+            <th>Required interval</th>
+            <th>Rule logic</th>
+            <th>Source passage & citation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in requirements %}
+          <tr>
+            <td class="text-mono" style="font-weight: 600; color: var(--accent-blue);">{{ r.requirement_code }}</td>
+            <td style="font-weight: 500; color: var(--text-primary);">{{ r.title }}</td>
+            <td><span class="badge badge-info">{{ r.requirement_type }}</span></td>
+            <td class="text-mono">{{ r.nominal_value if r.nominal_value is not none else '—' }} {{ r.unit }}</td>
+            <td class="text-mono" style="font-size: 0.82rem;">
+              {% if r.min_val is not none and r.max_val is not none %}
+                <strong>[{{ r.min_val }}, {{ r.max_val }}]</strong> {{ r.unit }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td><span class="badge badge-pass">{{ r.tolerance_rule }}</span></td>
+            <td style="max-width: 340px; font-size: 0.8rem; color: var(--text-secondary);">
+              <div style="background: var(--bg-subtle); padding: 0.4rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); font-style: italic;">
+                "{{ r.raw_text }}"
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem;">
+                Page {{ r.page_number }} {% if r.section %}&bull; Section: {{ r.section }}{% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align: center; padding: 3rem 1.5rem; color: var(--text-secondary);">
+      <p style="font-size: 0.88rem; margin-bottom: 1rem;">No engineering requirements extracted yet.</p>
+      <button class="btn btn-primary btn-sm" onclick="openModal('addReqModal')">
+        <i data-lucide="plus"></i>
+        <span>Add manual requirement</span>
+      </button>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Add Requirement Modal -->
+<div id="addReqModal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Add engineering requirement</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeModal('addReqModal')">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+    <form id="addReqForm">
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1rem;">
+          <div class="form-group">
+            <label class="form-label" for="reqCode">Code *</label>
+            <input type="text" id="reqCode" class="form-control" value="REQ-DIM-01" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reqTitle">Requirement title *</label>
+            <input type="text" id="reqTitle" class="form-control" placeholder="e.g. Journal Bearing Diameter" required>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="reqNominal">Nominal</label>
+            <input type="number" step="0.001" id="reqNominal" class="form-control" placeholder="20.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reqMin">Min limit</label>
+            <input type="number" step="0.001" id="reqMin" class="form-control" placeholder="19.9">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reqMax">Max limit</label>
+            <input type="number" step="0.001" id="reqMax" class="form-control" placeholder="20.1">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label class="form-label" for="reqUnit">Unit</label>
+            <input type="text" id="reqUnit" class="form-control" value="mm">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reqType">Type</label>
+            <select id="reqType" class="form-control">
+              <option value="dimension_limit">dimension_limit</option>
+              <option value="thread">thread</option>
+              <option value="surface_finish">surface_finish</option>
+              <option value="general_tolerance">general_tolerance</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="reqRawText">Source text / standard citation *</label>
+          <textarea id="reqRawText" class="form-control" rows="2" placeholder="e.g. Section 4.2: Journal OD shall be 20.0 ±0.1 mm" required></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('addReqModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save requirement</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const projectId = {{ project.id }};
+  document.getElementById('addReqBtn')?.addEventListener('click', () => openModal('addReqModal'));
+
+  document.getElementById('addReqForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      requirement_code: document.getElementById('reqCode').value.trim(),
+      title: document.getElementById('reqTitle').value.trim(),
+      nominal_value: document.getElementById('reqNominal').value ? parseFloat(document.getElementById('reqNominal').value) : null,
+      min_val: document.getElementById('reqMin').value ? parseFloat(document.getElementById('reqMin').value) : null,
+      max_val: document.getElementById('reqMax').value ? parseFloat(document.getElementById('reqMax').value) : null,
+      unit: document.getElementById('reqUnit').value.trim(),
+      requirement_type: document.getElementById('reqType').value,
+      tolerance_rule: 'interval_containment',
+      raw_text: document.getElementById('reqRawText').value.trim(),
+      page_number: 1
+    };
+
+    try {
+      const res = await fetch(`/api/v1/specifications/project/${projectId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        showToast('Requirement rule saved', 'success');
+        closeModal('addReqModal');
+        setTimeout(() => location.reload(), 350);
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'Failed to save requirement', 'error');
+      }
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    }
+  });
+
+  async function reEvaluateCompliance() {
+    try {
+      showToast('Running deterministic compliance check...', 'info');
+      const res = await fetch(`/api/v1/compliance/project/${projectId}/re-evaluate`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Compliance check complete', 'success');
+        setTimeout(() => location.reload(), 400);
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'Evaluation error', 'error');
+      }
+    } catch (err) {
+      showToast('Evaluation failed: ' + err.message, 'error');
+    }
+  }
+</script>
+{% endblock %}

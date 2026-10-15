@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} | Project Overview{% endblock %}
+{% block page_title %}{{ project.name }}{% endblock %}
+
+{% block topbar_breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="/projects">Projects</a>
+    <span class="breadcrumbs-separator">/</span>
+    <span>{{ project.part_number or project.name }}</span>
+  </div>
+{% endblock %}
+
+{% block topbar_actions %}
+  <button id="uploadDrawingBtn" class="btn btn-primary btn-sm">
+    <i data-lucide="file-up"></i>
+    <span>Upload drawing</span>
+  </button>
+  <button id="uploadSpecBtn" class="btn btn-secondary btn-sm">
+    <i data-lucide="clipboard-paste"></i>
+    <span>Upload specification</span>
+  </button>
+  <a href="/projects/{{ project.id }}/copilot" class="btn btn-secondary btn-sm">
+    <i data-lucide="message-circle"></i>
+    <span>Ask copilot</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<!-- Project Metadata Header -->
+<div class="section-block" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem; flex-wrap: wrap;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.5rem;">
+        <span class="badge badge-neutral">{{ project.revision or 'Rev A' }}</span>
+        <span class="text-mono" style="font-weight: 600; color: var(--accent-blue);">
+          Part: {{ project.part_number or 'Unspecified' }}
+        </span>
+        <span class="badge {% if project.status == 'active' %}badge-pass{% else %}badge-review{% endif %}">
+          {{ project.status }}
+        </span>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 0.9rem; max-width: 820px;">
+        {{ project.description or 'Mechanical assembly drawing package and specification requirements compliance tracking.' }}
+      </p>
+    </div>
+
+    <!-- Summary Metrics -->
+    <div style="display: flex; gap: 2rem; align-items: center;">
+      <div>
+        <div class="metric-label">Compliance findings</div>
+        <div class="metric-value {% if findings_count > 0 %}text-danger{% else %}text-success{% endif %}" style="font-size: 1.75rem;">
+          {{ findings_count }}
+        </div>
+      </div>
+      <div style="width: 1px; height: 36px; background-color: var(--border-subtle);"></div>
+      <div>
+        <div class="metric-label">Pending reviews</div>
+        <div class="metric-value {% if pending_count > 0 %}text-warning{% endif %}" style="font-size: 1.75rem;">
+          {{ pending_count }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5-Step Engineering Workflow Indicator -->
+<div class="workflow-steps">
+  <div class="step-item {% if drawings or specifications %}completed{% else %}active{% endif %}">
+    <span class="step-number">{% if drawings or specifications %}✓{% else %}1{% endif %}</span>
+    <span>1. Source Documents</span>
+  </div>
+  <div class="step-divider"></div>
+  <div class="step-item {% if analyses %}completed{% elif drawings %}active{% endif %}">
+    <span class="step-number">{% if analyses %}✓{% else %}2{% endif %}</span>
+    <span>2. Characteristics Extraction</span>
+  </div>
+  <div class="step-divider"></div>
+  <div class="step-item {% if pending_count == 0 and analyses %}completed{% elif pending_count > 0 %}active{% endif %}">
+    <span class="step-number">{% if pending_count == 0 and analyses %}✓{% else %}3{% endif %}</span>
+    <span>3. Human Review</span>
+  </div>
+  <div class="step-divider"></div>
+  <div class="step-item {% if findings_count is not none and analyses %}completed{% else %}active{% endif %}">
+    <span class="step-number">{% if findings_count is not none and analyses %}✓{% else %}4{% endif %}</span>
+    <span>4. Specification Comparison</span>
+  </div>
+  <div class="step-divider"></div>
+  <div class="step-item {% if analyses %}active{% endif %}">
+    <span class="step-number">5</span>
+    <span>5. Inspection Report</span>
+  </div>
+</div>
+
+<!-- Recommended Next Action Banner -->
+<div class="card" style="margin-bottom: 2rem; background-color: var(--bg-subtle); display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+  <div style="display: flex; align-items: center; gap: 0.75rem;">
+    <div style="width: 32px; height: 32px; border-radius: var(--radius-sm); background-color: var(--accent-blue-subtle); color: var(--accent-blue); display: flex; align-items: center; justify-content: center;">
+      <i data-lucide="compass" style="width: 18px; height: 18px;"></i>
+    </div>
+    <div>
+      <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">
+        Next recommended action:
+      </div>
+      <div style="font-size: 0.82rem; color: var(--text-secondary);">
+        {% if not drawings %}
+          Upload a mechanical engineering drawing (PDF, DXF, or raster) to start analysis.
+        {% elif not analyses %}
+          Run drawing intelligence analysis on <strong>{{ drawings[0].original_filename }}</strong>.
+        {% elif pending_count > 0 %}
+          Review {{ pending_count }} ambiguous characteristic callouts in the Review Queue.
+        {% else %}
+          All extractions verified. Review specification findings or generate inspection report.
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div>
+    {% if not drawings %}
+      <button class="btn btn-primary btn-sm" onclick="openModal('uploadDrawingModal')">
+        <i data-lucide="file-up"></i>
+        <span>Upload drawing</span>
+      </button>
+    {% elif not analyses %}
+      <button class="btn btn-primary btn-sm" onclick="runDrawingAnalysis({{ drawings[0].id }})">
+        <i data-lucide="play"></i>
+        <span>Run extraction</span>
+      </button>
+    {% elif pending_count > 0 %}
+      <a href="/projects/{{ project.id }}/review" class="btn btn-primary btn-sm">
+        <i data-lucide="eye"></i>
+        <span>Open review queue</span>
+      </a>
+    {% else %}
+      <a href="/projects/{{ project.id }}/reports" class="btn btn-primary btn-sm">
+        <i data-lucide="download"></i>
+        <span>Export report</span>
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Split Grid: Source Drawings & Technical Specifications -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2.5rem;">
+  <!-- Source Engineering Drawings -->
+  <div class="section-block">
+    <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+      <h3 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="file-text" style="width: 17px; height: 17px; color: var(--text-secondary);"></i>
+        <span>Engineering drawings</span>
+      </h3>
+      <span class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">{{ drawings|length }} files</span>
+    </div>
+
+    {% if drawings %}
+      <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+        {% for d in drawings %}
+        <div class="card" style="padding: 0.85rem 1.15rem; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary); margin-bottom: 0.2rem;">
+              {{ d.original_filename }}
+            </div>
+            <div class="text-mono" style="font-size: 0.75rem; color: var(--text-muted);">
+              {{ d.page_count }} page{{ 's' if d.page_count > 1 else '' }} &bull; {{ (d.file_size_bytes / 1024)|round(1) }} KB &bull; sha256: {{ d.sha256_hash[:8] }}
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.4rem;">
+            <button class="btn btn-primary btn-sm" onclick="runDrawingAnalysis({{ d.id }})">
+              <i data-lucide="play"></i>
+              <span>Analyze</span>
+            </button>
+            <a href="/api/v1/documents/raw/{{ d.id }}" target="_blank" class="btn btn-secondary btn-sm" title="Download raw drawing">
+              <i data-lucide="download"></i>
+            </a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; padding: 2.5rem 1.5rem; color: var(--text-secondary);">
+        <p style="font-size: 0.85rem; margin-bottom: 0.85rem;">No drawings uploaded to this project yet.</p>
+        <button class="btn btn-secondary btn-sm" onclick="openModal('uploadDrawingModal')">
+          <i data-lucide="file-up"></i>
+          <span>Upload drawing</span>
+        </button>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Technical Specifications -->
+  <div class="section-block">
+    <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+      <h3 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="clipboard-check" style="width: 17px; height: 17px; color: var(--text-secondary);"></i>
+        <span>Technical specifications</span>
+      </h3>
+      <a href="/projects/{{ project.id }}/specifications" class="btn btn-ghost btn-sm">
+        <span>Manage</span>
+        <i data-lucide="chevron-right"></i>
+      </a>
+    </div>
+
+    {% if specifications %}
+      <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+        {% for s in specifications %}
+        <div class="card" style="padding: 0.85rem 1.15rem; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary); margin-bottom: 0.2rem;">
+              {{ s.original_filename }}
+            </div>
+            <div class="text-mono" style="font-size: 0.75rem; color: var(--text-muted);">
+              Parsed requirements &bull; {{ (s.file_size_bytes / 1024)|round(1) }} KB
+            </div>
+          </div>
+          <a href="/projects/{{ project.id }}/specifications" class="btn btn-secondary btn-sm">
+            <span>View rules</span>
+            <i data-lucide="chevron-right"></i>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; padding: 2.5rem 1.5rem; color: var(--text-secondary);">
+        <p style="font-size: 0.85rem; margin-bottom: 0.85rem;">No technical specifications uploaded.</p>
+        <button class="btn btn-secondary btn-sm" onclick="openModal('uploadSpecModal')">
+          <i data-lucide="clipboard-paste"></i>
+          <span>Upload specification</span>
+        </button>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Extraction & Compliance Analysis History -->
+<div class="section-block">
+  <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+    <h3 class="card-title">Extraction and compliance history</h3>
+    {% if analyses %}
+      <a href="/projects/{{ project.id }}/reports" class="btn btn-ghost btn-sm">
+        <i data-lucide="download"></i>
+        <span>Export audit report</span>
+      </a>
+    {% endif %}
+  </div>
+
+  {% if analyses %}
+    <div class="table-container">
+      <table class="eng-table">
+        <thead>
+          <tr>
+            <th>Analysis ID</th>
+            <th>Source document</th>
+            <th>Pipeline</th>
+            <th>Status</th>
+            <th>Extracted characteristics</th>
+            <th>Last updated</th>
+            <th style="text-align: right;">Workspace</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in analyses %}
+          <tr>
+            <td class="text-mono" style="font-weight: 600;">#{{ a.id }}</td>
+            <td style="font-weight: 500;">{{ a.document.original_filename if a.document else 'Drawing' }}</td>
+            <td class="text-mono" style="font-size: 0.8rem; color: var(--text-secondary);">{{ a.pipeline_version }}</td>
+            <td>
+              {% if a.status == 'completed' %}
+                <span class="badge badge-pass">Completed</span>
+              {% elif a.status == 'needs_review' %}
+                <span class="badge badge-review">Needs review</span>
+              {% else %}
+                <span class="badge badge-fail">{{ a.status }}</span>
+              {% endif %}
+            </td>
+            <td class="text-mono">{{ a.annotations|length }} callouts</td>
+            <td class="text-mono" style="font-size: 0.8rem; color: var(--text-muted);">
+              {{ a.created_at.strftime('%Y-%m-%d %H:%M') }}
+            </td>
+            <td style="text-align: right;">
+              <a href="/projects/{{ project.id }}/analysis/{{ a.id }}" class="btn btn-primary btn-sm">
+                <i data-lucide="scan-search"></i>
+                <span>Open drawing viewer</span>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align: center; padding: 3rem 1.5rem; color: var(--text-secondary);">
+      <p style="font-size: 0.88rem; margin-bottom: 0.5rem;">No analyses run for this project yet.</p>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">Click "Analyze" on any uploaded drawing to execute OCR, dimension parsing, and compliance validation.</p>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Upload Drawing Modal -->
+<div id="uploadDrawingModal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Upload engineering drawing</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeModal('uploadDrawingModal')">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+    <form id="uploadDrawingForm" enctype="multipart/form-data">
+      <input type="hidden" name="project_id" value="{{ project.id }}">
+      <input type="hidden" name="file_type" value="drawing">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="drawingFileInput">Drawing file (PDF, DXF, PNG, JPG) *</label>
+          <input type="file" id="drawingFileInput" name="file" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.dxf" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('uploadDrawingModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Upload drawing</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Upload Specification Modal -->
+<div id="uploadSpecModal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Upload technical specification</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeModal('uploadSpecModal')">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+    <form id="uploadSpecForm" enctype="multipart/form-data">
+      <input type="hidden" name="project_id" value="{{ project.id }}">
+      <input type="hidden" name="file_type" value="specification">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="specFileInput">Specification document (PDF, TXT, MD) *</label>
+          <input type="file" id="specFileInput" name="file" class="form-control" accept=".pdf,.txt,.md" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('uploadSpecModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Upload & parse rules</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const projectId = {{ project.id }};
+  document.getElementById('uploadDrawingBtn')?.addEventListener('click', () => openModal('uploadDrawingModal'));
+  document.getElementById('uploadSpecBtn')?.addEventListener('click', () => openModal('uploadSpecModal'));
+
+  document.getElementById('uploadDrawingForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    try {
+      showToast('Uploading engineering drawing...', 'info');
+      const res = await fetch('/api/v1/documents/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Drawing uploaded successfully', 'success');
+        closeModal('uploadDrawingModal');
+        setTimeout(() => location.reload(), 400);
+      } else {
+        showToast(data.detail || 'Upload failed', 'error');
+      }
+    } catch (err) {
+      showToast('Error uploading drawing: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('uploadSpecForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    try {
+      showToast('Uploading specification document...', 'info');
+      const res = await fetch('/api/v1/documents/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Specification uploaded and clauses parsed', 'success');
+        closeModal('uploadSpecModal');
+        setTimeout(() => location.reload(), 400);
+      } else {
+        showToast(data.detail || 'Upload failed', 'error');
+      }
+    } catch (err) {
+      showToast('Error uploading specification: ' + err.message, 'error');
+    }
+  });
+
+  async function runDrawingAnalysis(documentId) {
+    try {
+      showToast('Running drawing intelligence analysis...', 'info');
+      const res = await fetch(`/api/v1/analysis/start?document_id=${documentId}&run_sync=true`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Analysis complete', 'success');
+        if (data.data && data.data.analysis_id) {
+          window.location.href = `/projects/${projectId}/analysis/${data.data.analysis_id}`;
+        } else {
+          location.reload();
+        }
+      } else {
+        showToast(data.detail || 'Pipeline failure', 'error');
+      }
+    } catch (err) {
+      showToast('Pipeline execution error: ' + err.message, 'error');
+    }
+  }
+</script>
+{% endblock %}

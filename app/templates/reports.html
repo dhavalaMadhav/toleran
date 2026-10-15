@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Reports & Exports | {{ project.name }}{% endblock %}
+{% block page_title %}Compliance Audit Reports & Exports{% endblock %}
+
+{% block topbar_breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="/projects">Projects</a>
+    <span class="breadcrumbs-separator">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.part_number or project.name }}</a>
+    <span class="breadcrumbs-separator">/</span>
+    <span>Reports</span>
+  </div>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <div>
+    <h2 class="section-title">Audit reports & exports</h2>
+    <p class="section-subtitle">Download formal verification packages, AS9102 inspection records, and CSV characteristics data.</p>
+  </div>
+</div>
+
+<!-- Section 1: Available Audit Reports -->
+<div class="section-block">
+  <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+    <h3 class="card-title">Generated inspection packages</h3>
+    <span class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">{{ analyses|length }} reports</span>
+  </div>
+
+  {% if analyses %}
+    <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+      {% for a in analyses %}
+      <div class="card" style="padding: 1.15rem 1.35rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.35rem;">
+            <span class="text-mono" style="font-weight: 600; font-size: 0.95rem; color: var(--text-primary);">
+              Analysis Report #{{ a.id }}
+            </span>
+            <span class="badge {% if a.status == 'completed' %}badge-pass{% else %}badge-review{% endif %}">
+              {{ a.status }}
+            </span>
+            <span class="text-mono" style="font-size: 0.75rem; color: var(--text-muted);">
+              Pipeline {{ a.pipeline_version }}
+            </span>
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-secondary);">
+            Source: <strong>{{ a.document.original_filename if a.document else 'Drawing file' }}</strong> &bull;
+            {{ a.annotations|length }} callouts &bull;
+            Generated: <span class="text-mono">{{ a.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+          </div>
+        </div>
+
+        <div style="display: inline-flex; gap: 0.5rem;">
+          <a href="/api/v1/reports/pdf/{{ project.id }}/{{ a.id }}" target="_blank" class="btn btn-primary btn-sm">
+            <i data-lucide="file-text"></i>
+            <span>Download PDF</span>
+          </a>
+          <a href="/api/v1/reports/csv/{{ project.id }}/{{ a.id }}" class="btn btn-secondary btn-sm">
+            <i data-lucide="download"></i>
+            <span>Export CSV</span>
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card" style="text-align: center; padding: 3rem 1.5rem; color: var(--text-secondary); font-size: 0.85rem;">
+      No completed drawing analyses available to generate reports from. Run an analysis from the project overview first.
+    </div>
+  {% endif %}
+</div>
+
+<!-- Section 2: Audited Findings Summary Table -->
+<div class="section-block">
+  <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+    <h3 class="card-title">Audited findings summary</h3>
+    <span class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">{{ findings|length }} rules evaluated</span>
+  </div>
+
+  {% if findings %}
+    <div class="table-container">
+      <table class="eng-table">
+        <thead>
+          <tr>
+            <th>Rule identifier</th>
+            <th>Outcome</th>
+            <th>Severity</th>
+            <th>Expected constraint</th>
+            <th>Observed dimension</th>
+            <th>Audit explanation</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in findings %}
+          <tr>
+            <td class="text-mono" style="font-weight: 600; color: var(--text-primary);">{{ f.rule_identifier }}</td>
+            <td>
+              <span class="badge {% if f.outcome == 'pass' %}badge-pass{% elif f.outcome == 'fail' %}badge-fail{% else %}badge-review{% endif %}">
+                {{ f.outcome|upper }}
+              </span>
+            </td>
+            <td>{{ f.severity }}</td>
+            <td class="text-mono">{{ f.expected_value or 'N/A' }}</td>
+            <td class="text-mono">{{ f.observed_value or 'N/A' }}</td>
+            <td style="font-size: 0.82rem; color: var(--text-secondary); max-width: 320px;">
+              {{ f.explanation }}
+            </td>
+            <td>
+              <span class="badge badge-neutral">{{ f.review_status }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align: center; padding: 2.5rem; color: var(--text-secondary); font-size: 0.85rem;">
+      No compliance findings recorded for this project yet.
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

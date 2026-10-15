@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Engineering Drawing Intelligence{% endblock %}
+{% block page_title %}Engineering Workspace{% endblock %}
+
+{% block topbar_actions %}
+  <button id="uploadDrawingDashboardBtn" class="btn btn-primary btn-sm">
+    <i data-lucide="file-up"></i>
+    <span>Upload drawing</span>
+  </button>
+  <a href="/projects" class="btn btn-secondary btn-sm">
+    <i data-lucide="folder-plus"></i>
+    <span>Create project</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<!-- Section Header with Supporting Context -->
+<div class="section-header">
+  <div>
+    <h2 class="section-title">Engineering workspace</h2>
+    <p class="section-subtitle">Review drawings, verify requirements, and prepare inspection documentation.</p>
+  </div>
+</div>
+
+<!-- Operational Summaries (Typography-Focused, Disciplined Alignment) -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-label">Projects in progress</div>
+    <div class="metric-value">{{ stats.total_projects }}</div>
+    <div class="metric-meta">Active mechanical assemblies</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Drawings awaiting review</div>
+    <div class="metric-value {% if stats.pending_reviews > 0 %}text-warning{% endif %}">{{ stats.pending_reviews }}</div>
+    <div class="metric-meta">Callouts requiring human sign-off</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Characteristics extracted</div>
+    <div class="metric-value text-success">{{ stats.completed_analyses }}</div>
+    <div class="metric-meta">Completed drawing analyses</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Reports ready for export</div>
+    <div class="metric-value">{{ stats.completed_analyses }}</div>
+    <div class="metric-meta">ASME / ISO compliance packages</div>
+  </div>
+
+  {% if stats.findings_error > 0 %}
+  <div class="metric-card">
+    <div class="metric-label">Compliance deviations</div>
+    <div class="metric-value text-danger">{{ stats.findings_error }}</div>
+    <div class="metric-meta">Out-of-specification callouts</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Main Activity & Recent Extractions Split Layout -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; align-items: start;">
+  <!-- Recent Engineering Projects & Activity -->
+  <div class="section-block">
+    <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+      <h3 class="card-title">Recent engineering projects</h3>
+      <a href="/projects" class="btn btn-ghost btn-sm">
+        <span>View all</span>
+        <i data-lucide="chevron-right"></i>
+      </a>
+    </div>
+
+    {% if recent_projects %}
+      <div class="table-container">
+        <table class="eng-table">
+          <thead>
+            <tr>
+              <th>Drawing or part</th>
+              <th>Project</th>
+              <th>Revision</th>
+              <th>Status</th>
+              <th>Last updated</th>
+              <th style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in recent_projects %}
+            <tr>
+              <td>
+                <a href="/projects/{{ p.id }}" style="color: var(--accent-blue); font-weight: 600; text-decoration: none;">
+                  {{ p.part_number or p.name }}
+                </a>
+              </td>
+              <td style="color: var(--text-secondary);">{{ p.name }}</td>
+              <td><span class="badge badge-neutral">{{ p.revision or 'Rev A' }}</span></td>
+              <td>
+                <span class="badge {% if p.status == 'active' %}badge-pass{% else %}badge-review{% endif %}">
+                  {{ p.status }}
+                </span>
+              </td>
+              <td class="text-mono" style="font-size: 0.8rem; color: var(--text-muted);">
+                {{ p.updated_at.strftime('%Y-%m-%d') if p.updated_at else '—' }}
+              </td>
+              <td style="text-align: right;">
+                <a href="/projects/{{ p.id }}" class="btn btn-secondary btn-sm">
+                  <span>Open</span>
+                  <i data-lucide="chevron-right"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; padding: 3rem 1.5rem;">
+        <i data-lucide="folder" style="width: 32px; height: 32px; color: var(--text-muted); margin: 0 auto 0.75rem;"></i>
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.35rem;">No projects in workspace</h3>
+        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">Create a project to start extracting drawing characteristics and checking compliance.</p>
+        <a href="/projects" class="btn btn-primary btn-sm">Create first project</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent Pipeline Activity & Failures -->
+  <div class="section-block">
+    <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+      <h3 class="card-title">Recent extractions</h3>
+    </div>
+
+    {% if recent_analyses %}
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for a in recent_analyses %}
+        <div class="card" style="padding: 1rem 1.15rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <span class="text-mono" style="font-weight: 600; font-size: 0.82rem;">Analysis #{{ a.id }}</span>
+            {% if a.status == 'completed' %}
+              <span class="badge badge-pass">Completed</span>
+            {% elif a.status == 'needs_review' %}
+              <span class="badge badge-review">Needs review</span>
+            {% else %}
+              <span class="badge badge-fail">{{ a.status }}</span>
+            {% endif %}
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            {{ a.document.original_filename if a.document else 'Drawing file' }}
+          </div>
+          <a href="/projects/{{ a.project_id }}/analysis/{{ a.id }}" class="btn btn-secondary btn-sm" style="width: 100%;">
+            <i data-lucide="scan-search"></i>
+            <span>Open drawing viewer</span>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.85rem;">
+        No drawing extractions recorded yet.
+      </div>
+    {% endif %}
+
+    <!-- Failed Jobs Alert Panel (Only shown when actual failures exist) -->
+    {% if failed_jobs %}
+    <div class="card" style="margin-top: 1.5rem; border-color: var(--color-fail-border); background-color: var(--color-fail-subtle);">
+      <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-fail); font-weight: 600; font-size: 0.88rem; margin-bottom: 0.65rem;">
+        <i data-lucide="alert-triangle"></i>
+        <span>Pipeline jobs requiring attention</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        {% for j in failed_jobs %}
+        <div style="padding: 0.5rem 0.65rem; background: #FFFFFF; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); font-size: 0.8rem;">
+          <div style="font-weight: 600; color: var(--color-fail);">Job #{{ j.id }} &bull; Stage: {{ j.stage }}</div>
+          <div style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 0.2rem;">{{ j.error_message }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Upload Drawing Modal on Dashboard -->
+<div id="uploadDrawingDashboardModal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Upload engineering drawing</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeModal('uploadDrawingDashboardModal')">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+    <form id="uploadDrawingDashboardForm" enctype="multipart/form-data">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="targetProjectId">Target project *</label>
+          <select id="targetProjectId" name="project_id" class="form-control" required>
+            {% for p in recent_projects %}
+              <option value="{{ p.id }}">{{ p.name }} ({{ p.part_number or 'No part #' }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="dashDrawingFile">Drawing file (PDF, DXF, PNG, JPG) *</label>
+          <input type="file" id="dashDrawingFile" name="file" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.dxf" required>
+        </div>
+        <input type="hidden" name="file_type" value="drawing">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('uploadDrawingDashboardModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Upload drawing</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.getElementById('uploadDrawingDashboardBtn')?.addEventListener('click', () => {
+    openModal('uploadDrawingDashboardModal');
+  });
+
+  document.getElementById('uploadDrawingDashboardForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const projId = document.getElementById('targetProjectId').value;
+    try {
+      showToast('Uploading drawing...', 'info');
+      const res = await fetch('/api/v1/documents/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Drawing uploaded successfully', 'success');
+        closeModal('uploadDrawingDashboardModal');
+        setTimeout(() => window.location.href = `/projects/${projId}`, 500);
+      } else {
+        showToast(data.detail || 'Upload failed', 'error');
+      }
+    } catch (err) {
+      showToast('Upload error: ' + err.message, 'error');
+    }
+  });
+</script>
+{% endblock %}

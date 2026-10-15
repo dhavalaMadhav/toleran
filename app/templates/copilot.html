@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Copilot Q&A | {{ project.name }}{% endblock %}
+{% block page_title %}Engineering Copilot & Citation Assistant{% endblock %}
+
+{% block topbar_breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="/projects">Projects</a>
+    <span class="breadcrumbs-separator">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.part_number or project.name }}</a>
+    <span class="breadcrumbs-separator">/</span>
+    <span>Copilot</span>
+  </div>
+{% endblock %}
+
+{% block topbar_actions %}
+  <button id="clearChatBtn" class="btn btn-secondary btn-sm" onclick="clearCurrentChat()">
+    <i data-lucide="plus"></i>
+    <span>New session</span>
+  </button>
+{% endblock %}
+
+{% block content %}
+<div class="section-header" style="margin-bottom: 1.25rem;">
+  <div>
+    <h2 class="section-title">Engineering copilot</h2>
+    <p class="section-subtitle">Grounded technical inquiries referencing drawing dimensions, OCR geometry, and specification clauses.</p>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 260px 1fr; gap: 1.5rem; align-items: start;">
+  <!-- Left Side: Sessions & Suggested Inquiries -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Prior Sessions -->
+    <div class="card" style="padding: 1rem 1.15rem;">
+      <div class="card-header" style="padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+        <h3 class="card-title" style="font-size: 0.88rem;">Sessions</h3>
+      </div>
+
+      <div id="sessionList" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 200px; overflow-y: auto;">
+        {% if conversations %}
+          {% for c in conversations %}
+          <div class="nav-link" style="font-size: 0.8rem; cursor: pointer; padding: 0.45rem 0.6rem;" onclick="loadConversation({{ c.id }})">
+            <i data-lucide="message-square" style="width: 14px; height: 14px;"></i>
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.title[:22] }}...</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="font-size: 0.78rem; color: var(--text-muted); padding: 0.25rem 0;">No prior sessions recorded.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Suggested Engineering Inquiries -->
+    <div class="card" style="padding: 1rem 1.15rem;">
+      <div class="card-header" style="padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+        <h3 class="card-title" style="font-size: 0.88rem;">Suggested inquiries</h3>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+        <button class="btn btn-ghost btn-sm" style="text-align: left; justify-content: flex-start; font-size: 0.78rem; padding: 0.4rem 0.5rem;" onclick="askSamplePrompt('What dimensions were extracted from this drawing?')">
+          <i data-lucide="list"></i>
+          <span>List extracted dimensions</span>
+        </button>
+        <button class="btn btn-ghost btn-sm" style="text-align: left; justify-content: flex-start; font-size: 0.78rem; padding: 0.4rem 0.5rem;" onclick="askSamplePrompt('Which dimensions need manual engineering review?')">
+          <i data-lucide="alert-triangle"></i>
+          <span>Review-flagged callouts</span>
+        </button>
+        <button class="btn btn-ghost btn-sm" style="text-align: left; justify-content: flex-start; font-size: 0.78rem; padding: 0.4rem 0.5rem;" onclick="askSamplePrompt('Why was this tolerance flagged as a compliance discrepancy?')">
+          <i data-lucide="x-circle"></i>
+          <span>Explain compliance discrepancies</span>
+        </button>
+        <button class="btn btn-ghost btn-sm" style="text-align: left; justify-content: flex-start; font-size: 0.78rem; padding: 0.4rem 0.5rem;" onclick="askSamplePrompt('Show me all diameter dimensions above 15 mm')">
+          <i data-lucide="circle-dot"></i>
+          <span>Filter diameter dimensions</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Side: Clean White Chat Panel -->
+  <div class="copilot-container">
+    <div id="chatMessages" class="chat-messages">
+      <!-- Grounded Introduction -->
+      <div class="chat-bubble assistant">
+        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+          <i data-lucide="sparkles" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+          <span>Engineering assistant &bull; {{ project.name }}</span>
+        </div>
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">
+          All technical answers are strictly grounded in database records, geometric features, and specification requirements for part <strong>{{ project.part_number or 'N/A' }}</strong>.
+        </p>
+      </div>
+    </div>
+
+    <!-- Chat Input Area -->
+    <form id="copilotForm" class="chat-input-bar">
+      <input type="text" id="copilotInput" class="form-control" style="flex: 1;" placeholder="Ask questions regarding dimensions, tolerances, or specification clauses..." required autocomplete="off">
+      <button type="submit" id="sendBtn" class="btn btn-primary">
+        <i data-lucide="send"></i>
+        <span>Send</span>
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const projectId = {{ project.id }};
+  let currentConversationId = null;
+
+  const chatMessages = document.getElementById('chatMessages');
+  const copilotForm = document.getElementById('copilotForm');
+  const copilotInput = document.getElementById('copilotInput');
+
+  function askSamplePrompt(promptText) {
+    copilotInput.value = promptText;
+    copilotForm.dispatchEvent(new Event('submit'));
+  }
+
+  function clearCurrentChat() {
+    currentConversationId = null;
+    location.reload();
+  }
+
+  async function loadConversation(convId) {
+    currentConversationId = convId;
+    try {
+      const res = await fetch(`/api/v1/copilot/messages/${convId}`);
+      const data = await res.json();
+      if (res.ok) {
+        chatMessages.innerHTML = '';
+        data.data.forEach(m => {
+          appendMessage(m.role, m.content, m.citations);
+        });
+      }
+    } catch (e) {
+      showToast('Error loading history: ' + e.message, 'error');
+    }
+  }
+
+  function appendMessage(role, text, citations = []) {
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble ${role}`;
+
+    let html = `<div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.35rem; color: ${role === 'user' ? 'var(--text-secondary)' : 'var(--text-primary)'};">${role === 'user' ? 'Engineer' : 'Copilot'}</div>`;
+
+    // Format basic markdown safely
+    let formatted = text
+      .replace(/### (.*?)\n/g, '<h4 style="font-size:0.9rem; font-weight:600; margin:0.5rem 0 0.25rem;">$1</h4>')
+      .replace(/#### (.*?)\n/g, '<h5 style="font-size:0.85rem; font-weight:600; color:var(--text-secondary); margin:0.4rem 0 0.2rem;">$1</h5>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`(.*?)`/g, '<code class="text-mono" style="background:var(--bg-subtle); padding:0.1rem 0.35rem; border-radius:3px; border:1px solid var(--border-subtle); font-size:0.8rem;">$1</code>')
+      .replace(/- (.*?)\n/g, '<li style="margin-left:1rem; font-size:0.85rem;">$1</li>');
+
+    html += `<div style="font-size: 0.86rem; line-height: 1.6;">${formatted}</div>`;
+
+    if (citations && citations.length > 0) {
+      html += `<div style="margin-top: 0.75rem; border-top: 1px solid var(--border-subtle); padding-top: 0.5rem;">`;
+      html += `<div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em;">Citations:</div>`;
+      html += `<div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem;">`;
+      citations.forEach(c => {
+        html += `<span class="citation-chip" title="${c.excerpt_or_value}">#${c.identifier} (Page ${c.page_number})</span>`;
+      });
+      html += `</div></div>`;
+    }
+
+    bubble.innerHTML = html;
+    chatMessages.appendChild(bubble);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  copilotForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const query = copilotInput.value.trim();
+    if (!query) return;
+
+    appendMessage('user', query);
+    copilotInput.value = '';
+
+    const thinkingBubble = document.createElement('div');
+    thinkingBubble.className = 'chat-bubble assistant';
+    thinkingBubble.id = 'thinkingBubble';
+    thinkingBubble.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.85rem;">Retrieving citations and evaluating database records...</span>';
+    chatMessages.appendChild(thinkingBubble);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    try {
+      const res = await fetch('/api/v1/copilot/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          message: query,
+          conversation_id: currentConversationId
+        })
+      });
+
+      const data = await res.json();
+      thinkingBubble.remove();
+
+      if (res.ok && data.data) {
+        currentConversationId = data.data.conversation_id;
+        appendMessage('assistant', data.data.content, data.data.citations);
+      } else {
+        appendMessage('assistant', 'Unable to retrieve answer: ' + (data.message || 'Service unavailable'));
+      }
+    } catch (err) {
+      thinkingBubble.remove();
+      appendMessage('assistant', 'Communication error with copilot service: ' + err.message);
+    }
+  });
+</script>
+{% endblock %}

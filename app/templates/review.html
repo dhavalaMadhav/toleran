@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Review Queue | {{ project.name }}{% endblock %}
+{% block page_title %}Engineering Verification & Review Queue{% endblock %}
+
+{% block topbar_breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="/projects">Projects</a>
+    <span class="breadcrumbs-separator">/</span>
+    <a href="/projects/{{ project.id }}">{{ project.part_number or project.name }}</a>
+    <span class="breadcrumbs-separator">/</span>
+    <span>Review Queue</span>
+  </div>
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/projects/{{ project.id }}/reports" class="btn btn-secondary btn-sm">
+    <i data-lucide="download"></i>
+    <span>Export audit report</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <div>
+    <h2 class="section-title">Human-in-the-loop review queue</h2>
+    <p class="section-subtitle">Verify low-confidence extractions, resolve compliance deviations, and maintain complete audit traceability.</p>
+  </div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 2.5rem;">
+  <!-- Section 1: Pending Characteristics Requiring Verification -->
+  <div class="section-block">
+    <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+      <div>
+        <h3 class="card-title">Pending characteristic verifications</h3>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.15rem;">
+          Extractions with lower OCR confidence, ambiguous geometry, or candidate collisions
+        </p>
+      </div>
+      <span class="badge badge-review">{{ pending_annotations|length }} items</span>
+    </div>
+
+    {% if pending_annotations %}
+      <div class="table-container">
+        <table class="eng-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Crop evidence</th>
+              <th>Callout text</th>
+              <th>Parsed nominal & interval</th>
+              <th>Confidence</th>
+              <th>Ambiguity reason</th>
+              <th style="text-align: right;">Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in pending_annotations %}
+            <tr>
+              <td class="text-mono" style="font-size: 0.8rem; color: var(--text-muted);">#{{ a.id }}</td>
+              <td style="width: 130px;">
+                {% if a.crop_image_path %}
+                  <img src="/static/{{ a.crop_image_path.replace('\\', '/') }}" style="max-height: 42px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: #FAFAFA;" alt="Evidence Crop">
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">No crop</span>
+                {% endif %}
+              </td>
+              <td>
+                <strong style="color: var(--text-primary); font-family: var(--font-mono); font-size: 0.88rem;">{{ a.original_text }}</strong>
+                <div style="font-size: 0.72rem; color: var(--text-muted);">Page {{ a.page_number }} &bull; {{ a.dimension_type }}</div>
+              </td>
+              <td class="text-mono">
+                <div style="font-weight: 500;">{{ a.nominal_value if a.nominal_value is not none else 'Unset' }} {{ a.unit }}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">
+                  [{{ a.min_val or '?' }}, {{ a.max_val or '?' }}]
+                </div>
+              </td>
+              <td>
+                <span class="badge {% if a.confidence >= 0.85 %}badge-pass{% elif a.confidence >= 0.60 %}badge-review{% else %}badge-fail{% endif %}">
+                  {{ (a.confidence * 100)|round(1) }}%
+                </span>
+              </td>
+              <td style="font-size: 0.8rem; color: var(--color-review); max-width: 240px;">
+                {{ a.ambiguity_reason or 'Requires engineer sign-off' }}
+              </td>
+              <td style="text-align: right;">
+                <div style="display: inline-flex; gap: 0.4rem;">
+                  <button class="btn btn-success btn-sm" onclick="reviewAnnotation({{ a.id }}, 'approved')">
+                    <i data-lucide="check"></i>
+                    <span>Approve</span>
+                  </button>
+                  <button class="btn btn-danger btn-sm" onclick="reviewAnnotation({{ a.id }}, 'rejected')">
+                    <i data-lucide="x"></i>
+                    <span>Reject</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; padding: 2.5rem; color: var(--text-secondary);">
+        <i data-lucide="check-circle" style="width: 28px; height: 28px; color: var(--color-pass); margin: 0 auto 0.5rem;"></i>
+        <div style="font-weight: 500; font-size: 0.9rem; color: var(--text-primary);">All characteristics verified</div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">All drawing callouts have been verified or auto-accepted by the compliance engine.</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Section 2: Unresolved Compliance Findings -->
+  <div class="section-block">
+    <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+      <div>
+        <h3 class="card-title">Unresolved compliance findings</h3>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.15rem;">
+          Tolerance interval deviations, unit conflicts, or missing specifications
+        </p>
+      </div>
+      <span class="badge badge-fail">{{ unresolved_findings|length }} findings</span>
+    </div>
+
+    {% if unresolved_findings %}
+      <div class="table-container">
+        <table class="eng-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Rule identifier</th>
+              <th>Severity</th>
+              <th>Outcome</th>
+              <th>Explanation & Expected vs Observed</th>
+              <th style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in unresolved_findings %}
+            <tr>
+              <td class="text-mono" style="font-size: 0.8rem; color: var(--text-muted);">#{{ f.id }}</td>
+              <td>
+                <strong style="color: var(--text-primary);">{{ f.rule_identifier }}</strong>
+                <div style="font-size: 0.72rem; color: var(--text-muted);">{{ f.finding_type }}</div>
+              </td>
+              <td>
+                <span class="badge {% if f.severity == 'error' %}badge-fail{% else %}badge-review{% endif %}">
+                  {{ f.severity }}
+                </span>
+              </td>
+              <td>
+                <span class="badge {% if f.outcome == 'fail' %}badge-fail{% else %}badge-review{% endif %}">
+                  {{ f.outcome|upper }}
+                </span>
+              </td>
+              <td style="font-size: 0.82rem; max-width: 340px;">
+                <div style="color: var(--text-primary); margin-bottom: 0.25rem;">{{ f.explanation }}</div>
+                <div style="color: var(--text-muted); font-size: 0.75rem;">
+                  Expected: <code class="text-mono">{{ f.expected_value or 'N/A' }}</code> &bull; Observed: <code class="text-mono">{{ f.observed_value or 'N/A' }}</code>
+                </div>
+              </td>
+              <td style="text-align: right;">
+                <div style="display: inline-flex; gap: 0.4rem;">
+                  <button class="btn btn-warning btn-sm" onclick="reviewFinding({{ f.id }}, 'approved_deviation')">
+                    <span>Grant waiver</span>
+                  </button>
+                  <button class="btn btn-secondary btn-sm" onclick="reviewFinding({{ f.id }}, 'remediated')">
+                    <span>Remediated</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; padding: 2.5rem; color: var(--text-secondary);">
+        <i data-lucide="check-circle" style="width: 28px; height: 28px; color: var(--color-pass); margin: 0 auto 0.5rem;"></i>
+        <div style="font-weight: 500; font-size: 0.9rem; color: var(--text-primary);">No unresolved findings</div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">All compliance rules for this assembly have been resolved or waived.</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Section 3: Audited Engineering Decisions Log -->
+  <div class="section-block">
+    <div class="card-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0.85rem;">
+      <h3 class="card-title">Audited review decisions log</h3>
+      <span class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">{{ decisions|length }} logged actions</span>
+    </div>
+
+    {% if decisions %}
+      <div class="table-container">
+        <table class="eng-table">
+          <thead>
+            <tr>
+              <th>Decision ID</th>
+              <th>Target</th>
+              <th>Action taken</th>
+              <th>Reviewer</th>
+              <th>Timestamp</th>
+              <th>Audit notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in decisions %}
+            <tr>
+              <td class="text-mono" style="font-size: 0.8rem; color: var(--text-muted);">#{{ d.id }}</td>
+              <td class="text-mono" style="font-size: 0.82rem;">{{ d.target_type }} #{{ d.target_id }}</td>
+              <td><span class="badge badge-info">{{ d.decision }}</span></td>
+              <td>{{ d.reviewer.full_name if d.reviewer else 'Engineer' }}</td>
+              <td class="text-mono" style="font-size: 0.78rem; color: var(--text-muted);">
+                {{ d.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+              </td>
+              <td style="color: var(--text-secondary); font-size: 0.82rem;">{{ d.notes or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem;">
+        No review decisions recorded in audit history yet.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  async function reviewAnnotation(annotationId, decision) {
+    try {
+      const res = await fetch(`/api/v1/review/annotation/${annotationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: decision, notes: `Action by Lead Engineer via Review Queue` })
+      });
+      if (res.ok) {
+        showToast(`Annotation #${annotationId} ${decision}`, 'success');
+        setTimeout(() => location.reload(), 400);
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'Review submission failed', 'error');
+      }
+    } catch (e) {
+      showToast('Error: ' + e.message, 'error');
+    }
+  }
+
+  async function reviewFinding(findingId, decision) {
+    try {
+      const res = await fetch(`/api/v1/review/finding/${findingId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: decision, notes: `Compliance finding ${decision}` })
+      });
+      if (res.ok) {
+        showToast(`Finding #${findingId} updated to ${decision}`, 'success');
+        setTimeout(() => location.reload(), 400);
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'Failed to update finding', 'error');
+      }
+    } catch (e) {
+      showToast('Error: ' + e.message, 'error');
+    }
+  }
+</script>
+{% endblock %}
